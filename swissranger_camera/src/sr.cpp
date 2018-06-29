@@ -218,8 +218,9 @@ public:
     std::string default_addr("");
     nh_.param("ether_addr",  ether_addr_, default_addr);
     nh_.param("camera_name",  camera_name_, std::string("swissranger"));
+    nh_.param("camera_info_url",  camera_info_url_, std::string(""));
 
-    cinfo_ = new camera_info_manager::CameraInfoManager(nh_, camera_name_);
+    cinfo_ = new camera_info_manager::CameraInfoManager(nh_, camera_name_, camera_info_url_);
 
     nh_.param("use_filter", use_filter_, static_cast<bool>(USE_FILTER));
     dynamic_reconfigure::Server<swissranger_camera::SwissRangerConfig>::CallbackType f = boost::bind(&SRNode::reconfig, this, _1, _2);
