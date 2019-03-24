@@ -16,7 +16,9 @@
 #define SR_IMG_AMPLITUDE 1
 #define SR_IMG_CONFIDENCE 2
 
-#define SR4K_MODE (AM_CONF_MAP | AM_CONV_GRAY | AM_COR_FIX_PTRN | AM_DENOISE_ANF)
+// This is setting all of the possible modes
+// #define SR4K_MODE (AM_CONF_MAP | AM_CONV_GRAY | AM_COR_FIX_PTRN | AM_DENOISE_ANF)
+#define SR4K_MODE (AM_CONF_MAP | AM_CONV_GRAY)
 #define SR3K_MODE (AM_COR_FIX_PTRN | AM_MEDIAN)
 
 #ifdef USE_SR4K
@@ -64,7 +66,8 @@ public:
                 sensor_msgs::Image &image_d,
                 sensor_msgs::Image &image_i,
                 sensor_msgs::Image &image_c,
-                sensor_msgs::Image &image_d16);
+                sensor_msgs::Image &image_d16,
+                sensor_msgs::Image &image_i16);
 
   int setAutoExposure(bool on);
   int setIntegrationTime(int time);
