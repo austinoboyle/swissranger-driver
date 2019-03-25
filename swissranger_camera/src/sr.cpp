@@ -37,12 +37,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-
 #include <signal.h>
 #include <ros/ros.h>
 #include <boost/format.hpp>
 #include <sensor_msgs/CameraInfo.h>
 #include <image_transport/image_transport.h>
+#include <swissranger_camera/ExposureTime.h>
 #include <camera_info_manager/camera_info_manager.h>
 #include <tf/transform_listener.h>
 #include <dynamic_reconfigure/server.h>
@@ -133,14 +133,15 @@ class SRNode
 {
 private:
   ros::NodeHandle nh_;
-  image_transport::ImageTransport it_d_, it_i_, it_c_;
+  image_transport::ImageTransport it_;
   //std::string frame_id_;
   std::string camera_name_;
   std::string ether_addr_;
-  sensor_msgs::Image image_d_, image_i_, image_c_, image_d16_;
+  sensor_msgs::Image image_d_, image_i_, image_c_, image_d16_, image_i16_;
   sensor_msgs::PointCloud cloud_;
   sensor_msgs::PointCloud2 cloud2_;
   sensor_msgs::CameraInfo cam_info_;
+  swissranger_camera::ExposureTime exposure_info_;
 
   camera_info_manager::CameraInfoManager *cinfo_;
   std::string camera_info_url_;
@@ -148,40 +149,43 @@ private:
   // reconfigurable parameters
   // None right now, all are set once at runtime.
 
-
   ros::Publisher info_pub_;
   image_transport::Publisher image_pub_d_;
   image_transport::Publisher image_pub_i_;
   image_transport::Publisher image_pub_c_;
   image_transport::Publisher image_pub_d16_;
+  image_transport::Publisher image_pub_i16_;
   ros::Publisher cloud_pub_;
   ros::Publisher cloud_pub2_;
+  ros::Publisher exposure_pub_;
 
-  //int auto_exposure_;
-  //int integration_time_;
+  int auto_exposure_;
+  int integration_time_;
   int modulation_freq_;
   //int amp_threshold_;
   bool use_filter_;
 
   static bool device_open_;
 
-  dynamic_reconfigure::Server<swissranger_camera::SwissRangerConfig > dynsrv;
+  dynamic_reconfigure::Server<swissranger_camera::SwissRangerConfig> dynsrv;
   swissranger_camera::SwissRangerConfig config_;
-public:
-  static sr::SR* dev_;
 
-  SRNode(const ros::NodeHandle& nh): nh_(nh), it_d_(nh), it_i_(nh), it_c_(nh)
+public:
+  static sr::SR *dev_;
+
+  SRNode(const ros::NodeHandle &nh) : nh_(nh), it_(nh)
   {
     signal(SIGSEGV, &sigsegv_handler);
 
     info_pub_ = nh_.advertise<sensor_msgs::CameraInfo>("camera_info", 1);
-    image_pub_d_ = it_d_.advertise("distance/image_raw", 1);
-    image_pub_i_ = it_i_.advertise("intensity/image_raw", 1);
-    image_pub_c_ = it_c_.advertise("confidence/image_raw", 1);
-    image_pub_d16_ = it_c_.advertise("distance/image_raw16", 1);
+    image_pub_d_ = it_.advertise("distance/image_raw", 1);
+    image_pub_i_ = it_.advertise("intensity/image_raw", 1);
+    image_pub_c_ = it_.advertise("confidence/image_raw", 1);
+    image_pub_d16_ = it_.advertise("distance/image_raw16", 1);
+    image_pub_i16_ = it_.advertise("intensity/image_raw16", 1);
     cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud>("pointcloud_raw", 1);
     cloud_pub2_ = nh_.advertise<sensor_msgs::PointCloud2>("pointcloud2_raw", 1);
-
+    exposure_pub_ = nh_.advertise<swissranger_camera::ExposureTime>("exposure", 1);
     // set reconfigurable parameter defaults (all to automatic)
     // None right now
 
@@ -189,15 +193,15 @@ public:
     {
       dev_ = new sr::SR(use_filter_);
     }
-    catch (sr::Exception& e)
+    catch (sr::Exception &e)
     {
-      ROS_ERROR_STREAM("Exception thrown while constructing camera driver: " << e.what ());
+      ROS_ERROR_STREAM("Exception thrown while constructing camera driver: " << e.what());
       nh_.shutdown();
       return;
     }
 
     getInitParams();
-  } 
+  }
 
   ~SRNode()
   {
@@ -216,9 +220,11 @@ public:
   {
     nh_.param("modulation_freq", modulation_freq_, -1);
     std::string default_addr("");
-    nh_.param("ether_addr",  ether_addr_, default_addr);
-    nh_.param("camera_name",  camera_name_, std::string("swissranger"));
-    nh_.param("camera_info_url",  camera_info_url_, std::string(""));
+    nh_.param("ether_addr", ether_addr_, default_addr);
+    nh_.param("camera_name", camera_name_, std::string("swissranger"));
+    nh_.param("camera_info_url", camera_info_url_, std::string(""));
+    nh_.param("integration_time", integration_time_, 1);
+    nh_.param("auto_exposure", auto_exposure_, 1);
 
     cinfo_ = new camera_info_manager::CameraInfoManager(nh_, camera_name_, camera_info_url_);
 
@@ -260,21 +266,21 @@ public:
   {
     //    static bool first_cycle = true;
 
-//     if (updateParam("brightness", brightness_) || first_cycle)
-//       {
-//         if (dev_->setBrightness(brightness_) >= 0)
-//           {
-//             if (brightness_ >= 0)
-//               ROS_INFO ("[SRNode] Brightness set to %d", brightness_);
-//             else
-//               ROS_INFO ("[SRNode] Auto Brightness set");
-//           }
-//       }
+    //     if (updateParam("brightness", brightness_) || first_cycle)
+    //       {
+    //         if (dev_->setBrightness(brightness_) >= 0)
+    //           {
+    //             if (brightness_ >= 0)
+    //               ROS_INFO ("[SRNode] Brightness set to %d", brightness_);
+    //             else
+    //               ROS_INFO ("[SRNode] Auto Brightness set");
+    //           }
+    //       }
 
-//    first_cycle = false;
+    //    first_cycle = false;
   }
 
-  void reconfig(swissranger_camera::SwissRangerConfig & newconfig, uint32_t level)
+  void reconfig(swissranger_camera::SwissRangerConfig &newconfig, uint32_t level)
   {
     ROS_DEBUG("dynamic reconfigure level 0x%x", level);
 
@@ -320,7 +326,6 @@ public:
           cinfo_->setCameraInfo(cam_info_);
           newconfig.camera_info_url = "";
         }
-
       }
       else
       {
@@ -331,7 +336,7 @@ public:
 
     if ((config_.auto_exposure != newconfig.auto_exposure) && device_open_)
     {
-      if( newconfig.auto_exposure == 1)
+      if (newconfig.auto_exposure == 1)
       {
         SRNode::dev_->setAutoExposure(true);
       }
@@ -342,14 +347,14 @@ public:
     }
     if ((config_.integration_time != newconfig.integration_time) && device_open_)
     {
-      if( newconfig.auto_exposure != 1 )
+      if (newconfig.auto_exposure != 1)
       {
         SRNode::dev_->setIntegrationTime(newconfig.integration_time);
       }
     }
     if ((config_.amp_threshold != newconfig.amp_threshold) && device_open_)
     {
-      if( newconfig.amp_threshold >= 0 )
+      if (newconfig.amp_threshold >= 0)
       {
         SRNode::dev_->setAmplitudeThreshold(newconfig.amp_threshold);
       }
@@ -359,10 +364,10 @@ public:
       }
     }
 
-    config_ = newconfig;                // save new parameters
+    config_ = newconfig; // save new parameters
 
-    ROS_DEBUG_STREAM("[" << camera_name_  << "] reconfigured: frame_id " << newconfig.frame_id
-                     << ", camera_info_url " << newconfig.camera_info_url);
+    ROS_DEBUG_STREAM("[" << camera_name_ << "] reconfigured: frame_id " << newconfig.frame_id
+                         << ", camera_info_url " << newconfig.camera_info_url);
   }
 
   /** Main driver loop */
@@ -370,16 +375,17 @@ public:
   {
     while (nh_.ok())
     {
-      getParameters();                // check reconfigurable parameters
+      getParameters(); // check reconfigurable parameters
 
       // get current CameraInfo data
       cam_info_ = cinfo_->getCameraInfo();
       cloud2_.header.frame_id = cloud_.header.frame_id =
           image_d_.header.frame_id = image_i_.header.frame_id =
-          image_c_.header.frame_id = image_d16_.header.frame_id =
-          cam_info_.header.frame_id = camera_name_;//config_.frame_id;
+              image_c_.header.frame_id = image_d16_.header.frame_id =
+                  image_i16_.header.frame_id = exposure_info_.header.frame_id =
+                      cam_info_.header.frame_id = camera_name_; //config_.frame_id;
 
-      if(!device_open_)
+      if (!device_open_)
       {
         try
         {
@@ -395,7 +401,7 @@ public:
             ros::Duration(3.0).sleep();
           }
         }
-        catch (sr::Exception& e)
+        catch (sr::Exception &e)
         {
           ROS_ERROR_STREAM("Exception thrown while connecting to the camera: " << e.what());
           ros::Duration(3.0).sleep();
@@ -406,7 +412,7 @@ public:
         try
         {
           // Read data from the Camera
-          dev_->readData(cloud_,cloud2_,image_d_, image_i_, image_c_, image_d16_);
+          dev_->readData(cloud_, cloud2_, image_d_, image_i_, image_c_, image_d16_, image_i16_, exposure_info_);
 
           cam_info_.header.stamp = image_d_.header.stamp;
           cam_info_.height = image_d_.height;
@@ -414,21 +420,43 @@ public:
 
           // Publish it via image_transport
           if (info_pub_.getNumSubscribers() > 0)
+          {
             info_pub_.publish(cam_info_);
+          }
           if (image_pub_d_.getNumSubscribers() > 0)
+          {
             image_pub_d_.publish(image_d_);
+          }
           if (image_pub_i_.getNumSubscribers() > 0)
+          {
             image_pub_i_.publish(image_i_);
+          }
           if (image_pub_c_.getNumSubscribers() > 0)
+          {
             image_pub_c_.publish(image_c_);
+          }
           if (image_pub_d16_.getNumSubscribers() > 0)
+          {
             image_pub_d16_.publish(image_d16_);
+          }
+          if (image_pub_i16_.getNumSubscribers() > 0)
+          {
+            image_pub_i16_.publish(image_i16_);
+          }
           if (cloud_pub_.getNumSubscribers() > 0)
-            cloud_pub_.publish (cloud_);
+          {
+            cloud_pub_.publish(cloud_);
+          }
           if (cloud_pub2_.getNumSubscribers() > 0)
-            cloud_pub2_.publish (cloud2_);
+          {
+            cloud_pub2_.publish(cloud2_);
+          }
+          if (exposure_pub_.getNumSubscribers() > 0)
+          {
+            exposure_pub_.publish(exposure_info_);
+          }
         }
-        catch (sr::Exception & e)
+        catch (sr::Exception &e)
         {
           ROS_WARN_STREAM("Exception thrown trying to read data: " << e.what());
           dev_->close();
@@ -444,7 +472,7 @@ public:
 };
 
 // TODO: figure out a clean way to do this inside SRNode:
-sr::SR * SRNode::dev_ = NULL;
+sr::SR *SRNode::dev_ = NULL;
 bool SRNode::device_open_ = false;
 
 /** Segfault signal handler */

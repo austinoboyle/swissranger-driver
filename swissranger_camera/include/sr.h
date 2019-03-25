@@ -8,6 +8,7 @@
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/PointCloud.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <swissranger_camera/ExposureTime.h>
 
 #define USE_SR4K 1 // Comment this out for SR3K
 #define USE_FILTER 1
@@ -67,7 +68,8 @@ public:
                 sensor_msgs::Image &image_i,
                 sensor_msgs::Image &image_c,
                 sensor_msgs::Image &image_d16,
-                sensor_msgs::Image &image_i16);
+                sensor_msgs::Image &image_i16,
+                swissranger_camera::ExposureTime &exposure_info);
 
   int setAutoExposure(bool on);
   int setIntegrationTime(int time);

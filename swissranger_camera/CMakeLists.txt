@@ -7,7 +7,11 @@ ELSE()
 	set(SWISSRANGER_ENABLED 0)
 ENDIF()
 LIST(APPEND CMAKE_CXXFLAGS "-DSWISSRANGER_ENABLED")
-find_package(catkin REQUIRED COMPONENTS cmake_modules roscpp tf camera_info_manager image_transport dynamic_reconfigure driver_base sensor_msgs cv_bridge)
+find_package(catkin REQUIRED COMPONENTS 
+	cmake_modules roscpp tf camera_info_manager image_transport 
+	dynamic_reconfigure driver_base sensor_msgs
+	cv_bridge std_msgs message_generation
+	)
 
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
@@ -33,10 +37,21 @@ generate_dynamic_reconfigure_options(cfg/SwissRanger.cfg)
 
 include_directories(include ${catkin_INCLUDE_DIRS} cfg/cpp)
 
+add_message_files(
+  FILES
+  ExposureTime.msg
+)
+
+generate_messages(
+  DEPENDENCIES
+  std_msgs
+)
+
 catkin_package(
    INCLUDE_DIRS include
    LIBRARIES swissranger_utility
-   CATKIN_DEPENDS roscpp tf camera_info_manager image_transport dynamic_reconfigure driver_base
+   CATKIN_DEPENDS roscpp tf camera_info_manager image_transport
+   dynamic_reconfigure driver_base message_runtime
 )
 add_library(swissranger_utility src/swissranger_camera/utility.cpp
 	include/swissranger_camera/utility.h)
